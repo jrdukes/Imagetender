@@ -148,7 +148,7 @@ namespace JohnSkosnik.Imagetender
         public void ShowImages(string filePath)
         {
             lblFilepathname.Text = "Getting images in " + filePath + "…";
-            m_imageDisplays = GetImages(filePath);
+            GetImages(filePath, m_imageDisplays);
             m_imageDisplaysIndex = 0;
             ShowImage(m_imageDisplays, m_imageDisplaysIndex);
         }
@@ -196,11 +196,13 @@ namespace JohnSkosnik.Imagetender
             picImage.Image = image;
         }
 
-        private List<ImageDisplay> GetImages(string filePath)
+        private void GetImages(string filePath, List<ImageDisplay> imageDisplays)
         {
-            List<ImageDisplay> imageDisplays = new List<ImageDisplay>();
             try
             {
+                // Old version. This would throw an exception when trying to access a system directory like $RECYCLE or "System Volume Information".
+                // Plus it can be made more effient using LINQ.
+                /*
                 string[] directories = new string[] { filePath }.Concat(Directory.GetDirectories(filePath, "*", SearchOption.AllDirectories)).ToArray();
                 foreach (string directory in directories)
                 {
@@ -217,14 +219,40 @@ namespace JohnSkosnik.Imagetender
                         }
                     }
                 }
+                */
+
+                // New version.
+                string[] files = Directory.GetFiles(filePath);
+                // Only add files with common image extensions, taken from project properties. This should probably be customizable via the UI.
+                for (int i = 0; i < m_imageExtensions.Count(); i++)
+                {
+                    imageDisplays.AddRange(
+                        files
+                        .Where(x => x.EndsWith(m_imageExtensions[i], StringComparison.CurrentCultureIgnoreCase))
+                        .Select(x => new ImageDisplay(x, RotateFlipType.RotateNoneFlipNone))
+                        );
+                }
+                string[] directories = Directory.GetDirectories(filePath);
+                foreach (string directory in directories)
+                {
+                    GetImages(directory, imageDisplays);
+                }
+
                 imageDisplays.Sort();
+            }
+            catch (UnauthorizedAccessException uae)
+            {
+                /*
+                Do nothing. Yes, it's normally horrible to silently ignore exceptions. But Windows / C# lacks a way to test for
+                file and directory access (without getting into lots of messy AD stuff), so we simply try to read the dir, and assume
+                any caught UnauthorizedAccessExceptions are system or hidden directories that wouldn't contain images for viewing anyway. 
+                */
+                //MessageBox.Show("An UnauthorizedAccessException occured: “" + uae.Message + "”.", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             catch (Exception e)
             {
                 MessageBox.Show("An error occured: “" + e.Message + "”.", this.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-
-            return imageDisplays;
         }
 
         private void DeleteImage(List<ImageDisplay> imageDisplays, int index)
